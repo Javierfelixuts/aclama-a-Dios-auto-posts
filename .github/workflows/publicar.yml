@@ -1,0 +1,48 @@
+name: Publicador Automatico Aclama a Dios
+
+on:
+  schedule:
+    # 5:00 AM Sonora (12:00 UTC)
+    - cron: '0 12 * * *'
+    # 9:00 AM Sonora (16:00 UTC)
+    - cron: '0 16 * * *'
+    # 12:00 PM Sonora (19:00 UTC)
+    - cron: '0 19 * * *'
+    # 4:00 PM Sonora (23:00 UTC)
+    - cron: '0 23 * * *'
+    # 8:00 PM Sonora (03:00 UTC del día siguiente)
+    - cron: '0 3 * * *'
+  
+  
+  # Mantiene la opción de ejecutarlo manualmente si lo necesitas
+  workflow_dispatch:
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Instalar librerías
+        run: pip install requests
+
+      - name: Ejecutar script de publicación
+        env:
+          PAGE_ID: ${{ secrets.PAGE_ID }}
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        run: python publicar.py
+
+      - name: Guardar cambios en el JSON
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add publicaciones.json
+          git commit -m "Auto-update: post eliminado de la cola" || exit 0
+          git push
