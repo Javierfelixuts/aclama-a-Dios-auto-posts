@@ -3,7 +3,7 @@ import re
 
 ##cambiar variable 
 
-start_number = 901
+start_number = 1057
 def orden_natural(cadena):
   # Extrae bloques de números y texto para ordenarlos como enteros
   return [
