@@ -43,46 +43,28 @@ def publicar_siguiente():
     tiene_imagen = bool(ruta_imagen and os.path.exists(ruta_imagen))
 
     if tiene_imagen:
-        print(f"Paso 1: Subiendo imagen en borrador ({ruta_imagen})...")
-        url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
-        payload_photo = {
-            "published": "false",
+        print(f"Publicando imagen con texto en Facebook ({ruta_imagen})...")
+        url_api = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
+        payload = {
+            "caption": texto_completo,
             "access_token": ACCESS_TOKEN
         }
 
         with open(ruta_imagen, "rb") as img_file:
-            res_photo = requests.post(url_photo, data=payload_photo, files={"source": img_file})
-
-        if res_photo.status_code != 200:
-            print(f"Error al subir la imagen a Facebook: {res_photo.text}")
-            exit(1)
-
-        photo_id = res_photo.json().get("id")
-        print(f"Imagen subida con éxito. Photo ID: {photo_id}")
-
-        print("Paso 2: Publicando directamente en el Feed...")
-        url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-        payload_feed = {
-            "message": texto_completo,
-            "access_token": ACCESS_TOKEN,
-            "published": "true",
-            "attached_media": json.dumps([{"media_fbid": photo_id}])
-        }
-        response = requests.post(url_feed, data=payload_feed)
+            response = requests.post(url_api, data=payload, files={"source": img_file})
 
     else:
         print("Publicando post de solo texto directamente en el Feed...")
-        url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-        payload_feed = {
+        url_api = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
+        payload = {
             "message": texto_completo,
-            "access_token": ACCESS_TOKEN,
-            "published": "true"
+            "access_token": ACCESS_TOKEN
         }
-        response = requests.post(url_feed, data=payload_feed)
+        response = requests.post(url_api, data=payload)
 
     if response.status_code == 200:
         res_data = response.json()
-        print(f"¡Publicado en el muro con éxito! Post ID: {res_data.get('id')}")
+        print(f"¡Publicado en el muro con éxito! ID: {res_data.get('id')}")
 
         # Guardar el JSON actualizado sin la publicación procesada
         with open(JSON_FILE, "w", encoding="utf-8") as f:
