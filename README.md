@@ -1,1 +1,2 @@
-"# aclama a Dios"p 
+"# aclama a Dios"
+## publicaciones para agradar a Dios
