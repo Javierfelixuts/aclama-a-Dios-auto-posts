@@ -59,7 +59,7 @@ def publicar_siguiente():
     temp_image_path = "temp_imagen.png"
     tiene_imagen = False
 
-    # Descargar ÚNICAMENTE la imagen que toca (pesa poco porque es solo una)
+    # Descargar ÚNICAMENTE la imagen que toca
     if image_url:
         print("Descargando individualmente la imagen actual...")
         try:
@@ -73,49 +73,30 @@ def publicar_siguiente():
         except Exception as e:
             print(f"Excepción al descargar la imagen: {e}")
 
-    # Paso 1: Subir la imagen como archivo binario local temporal (esto sí le gusta a Facebook)
+    # Publicar directamente en Facebook enviando el archivo binario y el texto juntos
     if tiene_imagen:
-        print("Paso 1: Subiendo imagen en borrador a Facebook...")
-        url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
-        payload_photo = {
-            "published": "false",
+        print("Publicando imagen y texto directamente en un solo paso...")
+        url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
+        payload = {
+            "message": texto_completo,
             "access_token": ACCESS_TOKEN
         }
 
         with open(temp_image_path, "rb") as img_file:
-            res_photo = requests.post(url_photo, data=payload_photo, files={"source": img_file})
+            response = requests.post(url, data=payload, files={"source": img_file})
 
-        # Borrar inmediatamente la imagen temporal para no dejar basura
+        # Borrar inmediatamente la imagen temporal
         if os.path.exists(temp_image_path):
             os.remove(temp_image_path)
 
-        if res_photo.status_code != 200:
-            print(f"Error al subir la imagen a Facebook: {res_photo.text}")
-            exit(1)
-
-        photo_id = res_photo.json().get("id")
-        print(f"Imagen subida con éxito. Photo ID: {photo_id}")
-
-        # Paso 2: Publicar en el feed usando attached_media (evita el collage)
-        print("Paso 2: Publicando en el Feed con imagen adjunta...")
-        url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-        payload_feed = {
-            "message": texto_completo,
-            "access_token": ACCESS_TOKEN,
-            "published": "true",
-            "attached_media": json.dumps([{"media_fbid": photo_id}])
-        }
-        response = requests.post(url_feed, data=payload_feed)
-
     else:
-        print("Publicando post de solo texto directamente en el Feed...")
-        url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-        payload_feed = {
+        print("Publicando post de solo texto...")
+        url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
+        payload = {
             "message": texto_completo,
-            "access_token": ACCESS_TOKEN,
-            "published": "true"
+            "access_token": ACCESS_TOKEN
         }
-        response = requests.post(url_feed, data=payload_feed)
+        response = requests.post(url, data=payload)
 
     if response.status_code == 200:
         res_data = response.json()
