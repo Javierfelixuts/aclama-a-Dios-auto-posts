@@ -46,7 +46,7 @@ def publicar_siguiente():
 
     texto_completo = "\n\n".join(partes_texto)
 
-    # Construir la URL de la imagen para descargarla temporalmente
+    # Obtener la URL de GitHub Raw de esa imagen específica
     image_url = ""
     if ruta_imagen_relativa:
         if ruta_imagen_relativa.startswith("http"):
@@ -54,13 +54,14 @@ def publicar_siguiente():
         else:
             ruta_limpia = ruta_imagen_relativa.lstrip("/")
             image_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/{ruta_limpia}"
-        print(f"URL de imagen generada: {image_url}")
+        print(f"URL de imagen a descargar: {image_url}")
 
     temp_image_path = "temp_imagen.png"
     tiene_imagen = False
 
+    # Descargar ÚNICAMENTE la imagen que toca (pesa poco porque es solo una)
     if image_url:
-        print("Descargando temporalmente la imagen desde GitHub...")
+        print("Descargando individualmente la imagen actual...")
         try:
             img_response = requests.get(image_url)
             if img_response.status_code == 200:
@@ -68,11 +69,11 @@ def publicar_siguiente():
                     f_img.write(img_response.content)
                 tiene_imagen = True
             else:
-                print(f"No se pudo descargar la imagen (Código {img_response.status_code})")
+                print(f"Error al descargar la imagen (Código {img_response.status_code})")
         except Exception as e:
-            print(f"Error al descargar la imagen: {e}")
+            print(f"Excepción al descargar la imagen: {e}")
 
-    # Enviar a Facebook usando la lógica de dos pasos con archivo binario
+    # Paso 1: Subir la imagen como archivo binario local temporal (esto sí le gusta a Facebook)
     if tiene_imagen:
         print("Paso 1: Subiendo imagen en borrador a Facebook...")
         url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
@@ -84,7 +85,7 @@ def publicar_siguiente():
         with open(temp_image_path, "rb") as img_file:
             res_photo = requests.post(url_photo, data=payload_photo, files={"source": img_file})
 
-        # Borrar la imagen temporal de inmediato para mantener limpio el entorno
+        # Borrar inmediatamente la imagen temporal para no dejar basura
         if os.path.exists(temp_image_path):
             os.remove(temp_image_path)
 
@@ -95,6 +96,7 @@ def publicar_siguiente():
         photo_id = res_photo.json().get("id")
         print(f"Imagen subida con éxito. Photo ID: {photo_id}")
 
+        # Paso 2: Publicar en el feed usando attached_media (evita el collage)
         print("Paso 2: Publicando en el Feed con imagen adjunta...")
         url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
         payload_feed = {
