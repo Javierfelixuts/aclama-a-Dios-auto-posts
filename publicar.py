@@ -2,8 +2,8 @@ import json
 import os
 import requests
 
-PAGE_ID = os.environ.get("PAGE_ID_3")
-ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN_7")
+PAGE_ID = os.environ.get("PAGE_ID")
+ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
 
 JSON_FILE = "publicaciones.json"
 
@@ -14,7 +14,7 @@ def publicar_siguiente():
         return
 
     if not PAGE_ID or not ACCESS_TOKEN:
-        print("Error: No se encontraron las variables de entorno PAGE_ID_3 o ACCESS_TOKEN_7.")
+        print("Error: No se encontraron las variables de entorno PAGE_ID o ACCESS_TOKEN")
         return
 
     with open(JSON_FILE, "r", encoding="utf-8") as f:
