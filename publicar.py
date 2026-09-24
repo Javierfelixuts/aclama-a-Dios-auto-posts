@@ -53,7 +53,7 @@ def publicar_siguiente():
         nombre_archivo = os.path.basename(ruta_imagen_relativa)
         ruta_local_imagen = os.path.join(CARPETA_DESTINO, nombre_archivo)
         
-        # Construir la URL de GitHub Raw desde donde se va a descargar el original
+        # Construir la URL de GitHub Raw para descargar el original al vuelo
         image_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/images/{nombre_archivo}"
         
         print(f"Descargando imagen desde GitHub a: {ruta_local_imagen}")
@@ -67,33 +67,49 @@ def publicar_siguiente():
         except Exception as e:
             print(f"Excepción al descargar la imagen: {e}")
 
-    # Verificar si la imagen se descargó correctamente en la carpeta existente
     tiene_imagen = bool(ruta_local_imagen and os.path.exists(ruta_local_imagen))
 
     try:
         if tiene_imagen:
-            print("Publicando imagen y texto directamente en un solo paso...")
-            url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
-            payload = {
-                "message": texto_completo,
+            print(f"Paso 1: Subiendo imagen en borrador ({ruta_local_imagen})...")
+            url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
+            payload_photo = {
+                "published": "false", 
                 "access_token": ACCESS_TOKEN
             }
 
-            # Leer la imagen desde la carpeta existente
             with open(ruta_local_imagen, "rb") as img_file:
-                response = requests.post(url, data=payload, files={"source": img_file})
-        else:
-            print("Publicando post de solo texto...")
-            url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-            payload = {
+                res_photo = requests.post(url_photo, data=payload_photo, files={"source": img_file})
+
+            if res_photo.status_code != 200:
+                print(f"Error al subir la imagen a Facebook: {res_photo.text}")
+                exit(1)
+
+            photo_id = res_photo.json().get("id")
+            print(f"Imagen subida con éxito. Photo ID: {photo_id}")
+
+            print("Paso 2: Publicando directamente en el Feed con attached_media...")
+            url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
+            payload_feed = {
                 "message": texto_completo,
-                "access_token": ACCESS_TOKEN
+                "access_token": ACCESS_TOKEN,
+                "published": "true",
+                "attached_media": json.dumps([{"media_fbid": photo_id}])
             }
-            response = requests.post(url, data=payload)
+            response = requests.post(url_feed, data=payload_feed)
+        else:
+            print("Publicando post de solo texto directamente en el Feed...")
+            url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
+            payload_feed = {
+                "message": texto_completo,
+                "access_token": ACCESS_TOKEN,
+                "published": "true"
+            }
+            response = requests.post(url_feed, data=payload_feed)
 
         if response.status_code == 200:
             res_data = response.json()
-            print(f"¡Publicado con éxito! ID: {res_data.get('id') or res_data.get('post_id')}")
+            print(f"¡Publicado en el muro con éxito! Post ID: {res_data.get('id')}")
 
             # Guardar el JSON actualizado sin la publicación procesada
             with open(JSON_FILE, "w", encoding="utf-8") as f:
@@ -103,7 +119,7 @@ def publicar_siguiente():
             exit(1)
 
     finally:
-        # Bloque de limpieza: borra únicamente la imagen descargada, la carpeta con su .gitkeep se queda intacta
+        # Bloque de limpieza: borra la imagen temporal de la carpeta existente pase lo que pase
         if ruta_local_imagen and os.path.exists(ruta_local_imagen):
             os.remove(ruta_local_imagen)
             print(f"Imagen temporal eliminada de {ruta_local_imagen}")
