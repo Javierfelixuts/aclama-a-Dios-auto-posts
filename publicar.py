@@ -4,9 +4,10 @@ import requests
 
 PAGE_ID = os.environ.get("PAGE_ID")
 ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
+# GitHub provee automáticamente el nombre del repo (ej. "tu-usuario/tu-repo")
+GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "tu-usuario/tu-repo")
 
 JSON_FILE = "publicaciones.json"
-
 
 def publicar_siguiente():
     if not os.path.exists(JSON_FILE):
@@ -31,9 +32,9 @@ def publicar_siguiente():
     complemento = post.get("complemento", "")
     mensaje = post.get("mensaje", "")
     hashtags = post.get("hashtags", "")
-    ruta_imagen = post.get("images", "")
+    ruta_imagen_relativa = post.get("images", "")  # Ej: "images/6.png"
 
-    # Construir el texto adaptado a Aclama a Dios
+    # Construir el texto adaptado
     partes_texto = []
     if titulo:
         partes_texto.append(titulo)
@@ -46,18 +47,24 @@ def publicar_siguiente():
 
     texto_completo = "\n\n".join(partes_texto)
 
-    tiene_imagen = bool(ruta_imagen and os.path.exists(ruta_imagen))
+    # Si hay una ruta de imagen, construimos su URL pública de GitHub Raw
+    image_url = ""
+    if ruta_imagen_relativa:
+        # Quitamos la barra inicial si la tuviera para evitar doble barra //
+        ruta_limpia = ruta_imagen_relativa.lstrip("/")
+        image_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/{ruta_limpia}"
+        print(f"URL de imagen generada: {image_url}")
 
-    if tiene_imagen:
-        print(f"Paso 1: Subiendo imagen en borrador ({ruta_imagen})...")
+    if image_url:
+        print("Paso 1: Subiendo imagen a Facebook mediante URL...")
         url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
         payload_photo = {
             "published": "false",
+            "url": image_url,  # <-- AQUÍ ESTÁ EL TRUCO: Pasamos la URL en lugar de abrir el archivo binario
             "access_token": ACCESS_TOKEN
         }
 
-        with open(ruta_imagen, "rb") as img_file:
-            res_photo = requests.post(url_photo, data=payload_photo, files={"source": img_file})
+        res_photo = requests.post(url_photo, data=payload_photo)
 
         if res_photo.status_code != 200:
             print(f"Error al subir la imagen a Facebook: {res_photo.text}")
@@ -66,7 +73,7 @@ def publicar_siguiente():
         photo_id = res_photo.json().get("id")
         print(f"Imagen subida con éxito. Photo ID: {photo_id}")
 
-        print("Paso 2: Publicando en el Feed con imagen adjunta (evita collage)...")
+        print("Paso 2: Publicando en el Feed con imagen adjunta...")
         url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
         payload_feed = {
             "message": texto_completo,
@@ -96,7 +103,6 @@ def publicar_siguiente():
     else:
         print(f"Error al publicar en Facebook: {response.text}")
         exit(1)
-
 
 if __name__ == "__main__":
     publicar_siguiente()
