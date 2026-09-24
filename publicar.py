@@ -56,24 +56,45 @@ def publicar_siguiente():
             image_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/{ruta_limpia}"
         print(f"URL de imagen generada: {image_url}")
 
-    # Enviar a Facebook en una sola petición
-    if image_url:
-        print("Publicando imagen y texto directamente en un solo paso...")
-        url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
-        payload = {
-            "url": image_url,
-            "message": texto_completo,
-            "access_token": ACCESS_TOKEN
-        }
-    else:
-        print("Publicando post de solo texto...")
-        url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-        payload = {
-            "message": texto_completo,
-            "access_token": ACCESS_TOKEN
-        }
+    tiene_imagen = bool(image_url)
 
-    response = requests.post(url, data=payload)
+    # Enviar a Facebook usando la lógica de dos pasos
+    if tiene_imagen:
+        print("Paso 1: Subiendo imagen en borrador a Facebook mediante URL...")
+        url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
+        payload_photo = {
+            "url": image_url,
+            "published": "false",
+            "access_token": ACCESS_TOKEN
+        }
+        res_photo = requests.post(url_photo, data=payload_photo)
+
+        if res_photo.status_code != 200:
+            print(f"Error al subir la imagen a Facebook: {res_photo.text}")
+            exit(1)
+
+        photo_id = res_photo.json().get("id")
+        print(f"Imagen subida con éxito. Photo ID: {photo_id}")
+
+        print("Paso 2: Publicando en el Feed con imagen adjunta...")
+        url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
+        payload_feed = {
+            "message": texto_completo,
+            "access_token": ACCESS_TOKEN,
+            "published": "true",
+            "attached_media": json.dumps([{"media_fbid": photo_id}])
+        }
+        response = requests.post(url_feed, data=payload_feed)
+
+    else:
+        print("Publicando post de solo texto directamente en el Feed...")
+        url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
+        payload_feed = {
+            "message": texto_completo,
+            "access_token": ACCESS_TOKEN,
+            "published": "true"
+        }
+        response = requests.post(url_feed, data=payload_feed)
 
     if response.status_code == 200:
         res_data = response.json()
