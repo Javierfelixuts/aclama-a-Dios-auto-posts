@@ -4,8 +4,7 @@ import requests
 
 PAGE_ID = os.environ.get("PAGE_ID")
 ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
-# GitHub provee automáticamente el nombre del repo (ej. "tu-usuario/tu-repo")
-GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "tu-usuario/tu-repo")
+GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "Javierfelixuts/aclama-a-Dios-auto-posts")
 
 JSON_FILE = "publicaciones.json"
 
@@ -32,9 +31,9 @@ def publicar_siguiente():
     complemento = post.get("complemento", "")
     mensaje = post.get("mensaje", "")
     hashtags = post.get("hashtags", "")
-    ruta_imagen_relativa = post.get("images", "")  # Ej: "images/6.png"
+    ruta_imagen_relativa = post.get("images", "")
 
-    # Construir el texto adaptado
+    # Construir el texto completo
     partes_texto = []
     if titulo:
         partes_texto.append(titulo)
@@ -47,55 +46,38 @@ def publicar_siguiente():
 
     texto_completo = "\n\n".join(partes_texto)
 
-    # Si hay una ruta de imagen, construimos su URL pública de GitHub Raw
+    # Construir la URL de la imagen si existe
     image_url = ""
     if ruta_imagen_relativa:
-        # Quitamos la barra inicial si la tuviera para evitar doble barra //
-        ruta_limpia = ruta_imagen_relativa.lstrip("/")
-        image_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/{ruta_limpia}"
+        if ruta_imagen_relativa.startswith("http"):
+            image_url = ruta_imagen_relativa
+        else:
+            ruta_limpia = ruta_imagen_relativa.lstrip("/")
+            image_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/{ruta_limpia}"
         print(f"URL de imagen generada: {image_url}")
 
+    # Enviar a Facebook en una sola petición
     if image_url:
-        print("Paso 1: Subiendo imagen a Facebook mediante URL...")
-        url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
-        payload_photo = {
-            "published": "false",
-            "url": image_url,  # <-- AQUÍ ESTÁ EL TRUCO: Pasamos la URL en lugar de abrir el archivo binario
+        print("Publicando imagen y texto directamente en un solo paso...")
+        url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
+        payload = {
+            "url": image_url,
+            "message": texto_completo,
+            "access_token": ACCESS_TOKEN
+        }
+    else:
+        print("Publicando post de solo texto...")
+        url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
+        payload = {
+            "message": texto_completo,
             "access_token": ACCESS_TOKEN
         }
 
-        res_photo = requests.post(url_photo, data=payload_photo)
-
-        if res_photo.status_code != 200:
-            print(f"Error al subir la imagen a Facebook: {res_photo.text}")
-            exit(1)
-
-        photo_id = res_photo.json().get("id")
-        print(f"Imagen subida con éxito. Photo ID: {photo_id}")
-
-        print("Paso 2: Publicando en el Feed con imagen adjunta...")
-        url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-        payload_feed = {
-            "message": texto_completo,
-            "access_token": ACCESS_TOKEN,
-            "published": "true",
-            "attached_media": json.dumps([{"media_fbid": photo_id}])
-        }
-        response = requests.post(url_feed, data=payload_feed)
-
-    else:
-        print("Publicando post de solo texto directamente en el Feed...")
-        url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-        payload_feed = {
-            "message": texto_completo,
-            "access_token": ACCESS_TOKEN,
-            "published": "true"
-        }
-        response = requests.post(url_feed, data=payload_feed)
+    response = requests.post(url, data=payload)
 
     if response.status_code == 200:
         res_data = response.json()
-        print(f"¡Publicado en el muro con éxito! Post ID: {res_data.get('id')}")
+        print(f"¡Publicado con éxito! ID: {res_data.get('id') or res_data.get('post_id')}")
 
         # Guardar el JSON actualizado sin la publicación procesada
         with open(JSON_FILE, "w", encoding="utf-8") as f:
