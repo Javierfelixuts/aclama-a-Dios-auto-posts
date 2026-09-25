@@ -31,7 +31,6 @@ jobs:
             publicaciones.json
             .github/workflows/
             images_ready_to_post
-            images
 
       - name: Configurar Python
         uses: actions/setup-python@v4
