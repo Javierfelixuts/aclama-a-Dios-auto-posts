@@ -1,135 +1,386 @@
 import json
 import os
+import sys
 import requests
+
+# ============================================================
+# CONFIGURACIÓN
+# ============================================================
 
 PAGE_ID = os.environ.get("PAGE_ID")
 ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
-GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "Javierfelixuts/aclama-a-Dios-auto-posts")
+GITHUB_REPOSITORY = os.environ.get(
+    "GITHUB_REPOSITORY",
+    "Javierfelixuts/aclama-a-Dios-auto-posts"
+)
 
+GRAPH_VERSION = "v26.0"
 JSON_FILE = "publicaciones.json"
 CARPETA_DESTINO = "images_ready_to_post"
 
+
+# ============================================================
+# DESCARGAR IMAGEN
+# ============================================================
+
+def descargar_imagen(nombre_archivo):
+    os.makedirs(CARPETA_DESTINO, exist_ok=True)
+
+    ruta_local = os.path.join(
+        CARPETA_DESTINO,
+        nombre_archivo
+    )
+
+    image_url = (
+        f"https://raw.githubusercontent.com/"
+        f"{GITHUB_REPOSITORY}/main/images/{nombre_archivo}"
+    )
+
+    print(f"Descargando imagen: {image_url}")
+
+    try:
+        response = requests.get(image_url, timeout=30)
+
+        if response.status_code != 200:
+            print(
+                f"Error al descargar imagen. "
+                f"HTTP {response.status_code}"
+            )
+            return None
+
+        with open(ruta_local, "wb") as archivo:
+            archivo.write(response.content)
+
+        print(f"Imagen descargada: {ruta_local}")
+        return ruta_local
+
+    except Exception as e:
+        print(f"Error descargando imagen: {e}")
+        return None
+
+
+# ============================================================
+# SUBIR IMAGEN COMO BORRADOR
+# ============================================================
+
+def subir_imagen_borrador(ruta_imagen):
+    url = (
+        f"https://graph.facebook.com/"
+        f"{GRAPH_VERSION}/{PAGE_ID}/photos"
+    )
+
+    payload = {
+        "published": "false",
+        "access_token": ACCESS_TOKEN
+    }
+
+    print(
+        f"\nPaso 1: Subiendo imagen en borrador "
+        f"({ruta_imagen})..."
+    )
+
+    try:
+        with open(ruta_imagen, "rb") as imagen:
+            response = requests.post(
+                url,
+                data=payload,
+                files={"source": imagen},
+                timeout=60
+            )
+    except Exception as e:
+        print(f"Error subiendo imagen: {e}")
+        return None
+
+    print(
+        f"Respuesta de Facebook "
+        f"(HTTP {response.status_code}):"
+    )
+    print(response.text)
+
+    if response.status_code != 200:
+        return None
+
+    try:
+        data = response.json()
+    except Exception:
+        print("Facebook no devolvió JSON válido.")
+        return None
+
+    photo_id = data.get("id") or data.get("photo_id")
+
+    if not photo_id:
+        print("Facebook no devolvió un Photo ID válido.")
+        return None
+
+    print(f"Imagen subida con éxito. Photo ID: {photo_id}")
+    return str(photo_id)
+
+
+# ============================================================
+# PUBLICAR IMAGEN + TEXTO
+# ============================================================
+
+def publicar_con_imagen(photo_id, mensaje):
+    url = (
+        f"https://graph.facebook.com/"
+        f"{GRAPH_VERSION}/{PAGE_ID}/feed"
+    )
+
+    payload = {
+        "message": mensaje,
+        "attached_media": json.dumps([
+            {"media_fbid": str(photo_id)}
+        ]),
+        "access_token": ACCESS_TOKEN
+    }
+
+    print("\nPaso 2: Publicando imagen y texto en el Feed...")
+    print(f"Photo ID utilizado: {photo_id}")
+
+    try:
+        response = requests.post(
+            url,
+            data=payload,
+            timeout=60
+        )
+    except Exception as e:
+        print(f"Error publicando en Facebook: {e}")
+        return None
+
+    print(
+        f"Respuesta de Facebook "
+        f"(HTTP {response.status_code}):"
+    )
+    print(response.text)
+
+    if response.status_code != 200:
+        return None
+
+    try:
+        data = response.json()
+    except Exception:
+        print("Facebook no devolvió JSON válido.")
+        return None
+
+    post_id = data.get("id")
+
+    if not post_id:
+        print("Facebook no devolvió un ID de publicación.")
+        return None
+
+    print(f"¡Publicado con éxito! Post ID: {post_id}")
+    return post_id
+
+
+# ============================================================
+# PUBLICAR SOLO TEXTO
+# ============================================================
+
+def publicar_solo_texto(mensaje):
+    url = (
+        f"https://graph.facebook.com/"
+        f"{GRAPH_VERSION}/{PAGE_ID}/feed"
+    )
+
+    payload = {
+        "message": mensaje,
+        "access_token": ACCESS_TOKEN
+    }
+
+    print("\nPublicando publicación de solo texto...")
+
+    try:
+        response = requests.post(
+            url,
+            data=payload,
+            timeout=60
+        )
+    except Exception as e:
+        print(f"Error publicando en Facebook: {e}")
+        return None
+
+    print(
+        f"Respuesta de Facebook "
+        f"(HTTP {response.status_code}):"
+    )
+    print(response.text)
+
+    if response.status_code != 200:
+        return None
+
+    try:
+        data = response.json()
+    except Exception:
+        print("Facebook no devolvió JSON válido.")
+        return None
+
+    post_id = data.get("id")
+
+    if not post_id:
+        print("No se recibió ID de publicación.")
+        return None
+
+    print(f"¡Publicado con éxito! Post ID: {post_id}")
+    return post_id
+
+
+# ============================================================
+# PROCESAR SIGUIENTE PUBLICACIÓN
+# ============================================================
+
 def publicar_siguiente():
-    if not os.path.exists(JSON_FILE):
-        print(f"El archivo {JSON_FILE} no existe.")
-        return
-
     if not PAGE_ID or not ACCESS_TOKEN:
-        print("Error: No se encontraron las variables de entorno PAGE_ID o ACCESS_TOKEN")
-        return
+        print(
+            "Error: faltan PAGE_ID o ACCESS_TOKEN "
+            "en las variables de entorno."
+        )
+        sys.exit(1)
 
-    with open(JSON_FILE, "r", encoding="utf-8") as f:
-        publicaciones = json.load(f)
+    if not os.path.exists(JSON_FILE):
+        print(f"Error: no existe {JSON_FILE}.")
+        sys.exit(1)
+
+    try:
+        with open(JSON_FILE, "r", encoding="utf-8") as archivo:
+            publicaciones = json.load(archivo)
+    except Exception as e:
+        print(f"Error leyendo {JSON_FILE}: {e}")
+        sys.exit(1)
 
     if not publicaciones:
-        print("No hay publicaciones pendientes en la cola.")
+        print("No hay publicaciones pendientes.")
         return
 
-    # Extraer el primer post de la cola (FIFO)
-    post = publicaciones.pop(0)
+    # Tomamos la primera publicación, pero NO la eliminamos todavía.
+    post = publicaciones[0]
 
     titulo = post.get("titulo", "")
     complemento = post.get("complemento", "")
     mensaje = post.get("mensaje", "")
     hashtags = post.get("hashtags", "")
-    ruta_imagen_relativa = post.get("images", "") # Ej: "images/8.png" o "8.png"
+    ruta_imagen_relativa = post.get("images", "")
 
-    # Construir el texto completo
-    partes_texto = []
-    if titulo:
-        partes_texto.append(titulo)
-    if complemento:
-        partes_texto.append(complemento)
-    if mensaje:
-        partes_texto.append(mensaje)
-    if hashtags:
-        partes_texto.append(hashtags)
+    # Construir texto completo
+    partes = [
+        texto for texto in [
+            titulo,
+            complemento,
+            mensaje,
+            hashtags
+        ]
+        if texto
+    ]
 
-    texto_completo = "\n\n".join(partes_texto)
+    texto_completo = "\n\n".join(partes)
 
-    ruta_local_imagen = ""
-    if ruta_imagen_relativa:
-        nombre_archivo = os.path.basename(ruta_imagen_relativa)
-        ruta_local_imagen = os.path.join(CARPETA_DESTINO, nombre_archivo)
-        
-        image_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/images/{nombre_archivo}"
-        
-        print(f"Descargando imagen desde GitHub a: {ruta_local_imagen}")
-        try:
-            img_response = requests.get(image_url)
-            if img_response.status_code == 200:
-                with open(ruta_local_imagen, "wb") as f_img:
-                    f_img.write(img_response.content)
-            else:
-                print(f"Error al descargar la imagen (Código {img_response.status_code})")
-        except Exception as e:
-            print(f"Excepción al descargar la imagen: {e}")
+    print("\n" + "=" * 60)
+    print("PUBLICACIÓN")
+    print("=" * 60)
+    print(texto_completo)
+    print("=" * 60)
 
-    tiene_imagen = bool(ruta_local_imagen and os.path.exists(ruta_local_imagen))
+    ruta_local_imagen = None
+    post_id = None
 
     try:
-        if tiene_imagen:
-            print(f"Paso 1: Subiendo imagen en borrador ({ruta_local_imagen})...")
-            url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
-            
-            # Forzar explicitly el parámetro published como booleano o string limpio
-            payload_photo = {
-                "published": "false", 
-                "access_token": ACCESS_TOKEN
-            }
+        # ----------------------------------------------------
+        # DESCARGAR IMAGEN
+        # ----------------------------------------------------
 
-            with open(ruta_local_imagen, "rb") as img_file:
-                res_photo = requests.post(url_photo, data=payload_photo, files={"source": img_file})
+        if ruta_imagen_relativa:
+            nombre_archivo = os.path.basename(
+                ruta_imagen_relativa
+            )
 
-            if res_photo.status_code != 200:
-                print(f"Error al subir la imagen a Facebook: {res_photo.text}")
-                exit(1)
+            ruta_local_imagen = descargar_imagen(
+                nombre_archivo
+            )
 
-            res_photo_data = res_photo.json()
-            photo_id = res_photo_data.get("id") or res_photo_data.get("photo_id")
-            print(f"Imagen subida con éxito. Photo ID obtenido: {photo_id}")
+            if not ruta_local_imagen:
+                sys.exit(1)
+
+        # ----------------------------------------------------
+        # PUBLICAR
+        # ----------------------------------------------------
+
+        if ruta_local_imagen:
+            photo_id = subir_imagen_borrador(
+                ruta_local_imagen
+            )
 
             if not photo_id:
-                print(f"Error crítico: La API no devolvió un ID de foto válido. Respuesta: {res_photo_data}")
-                exit(1)
+                print("No se pudo subir la imagen.")
+                sys.exit(1)
 
-            print("Paso 2: Publicando en el Feed utilizando attached_media...")
-            url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-            
-            # Asegurar la estructura estricta que exige graph v19.0 para media adjunta
-            payload_feed = {
-                "message": texto_completo,
-                "access_token": ACCESS_TOKEN,
-                "published": "true",
-                "attached_media": json.dumps([{"media_fbid": str(photo_id)}])
-            }
-            response = requests.post(url_feed, data=payload_feed)
+            post_id = publicar_con_imagen(
+                photo_id,
+                texto_completo
+            )
         else:
-            print("Publicando post de solo texto directamente en el Feed...")
-            url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-            payload_feed = {
-                "message": texto_completo,
-                "access_token": ACCESS_TOKEN,
-                "published": "true"
-            }
-            response = requests.post(url_feed, data=payload_feed)
+            post_id = publicar_solo_texto(
+                texto_completo
+            )
 
-        if response.status_code == 200:
-            res_data = response.json()
-            print(f"¡Publicado en el muro con éxito! Post ID: {res_data.get('id')}")
+        # ----------------------------------------------------
+        # COMPROBAR RESULTADO
+        # ----------------------------------------------------
 
-            # Guardar el JSON actualizado sin la publicación procesada
-            with open(JSON_FILE, "w", encoding="utf-8") as f:
-                json.dump(publicaciones, f, ensure_ascii=False, indent=2)
-        else:
-            print(f"Error al publicar en Facebook: {response.text}")
-            exit(1)
+        if not post_id:
+            print(
+                "\nLa publicación NO fue realizada."
+            )
+            print(
+                "La publicación permanece en "
+                "publicaciones.json para reintentar."
+            )
+            sys.exit(1)
+
+        # ----------------------------------------------------
+        # ELIMINAR DE LA COLA
+        # ----------------------------------------------------
+
+        publicaciones.pop(0)
+
+        with open(
+            JSON_FILE,
+            "w",
+            encoding="utf-8"
+        ) as archivo:
+            json.dump(
+                publicaciones,
+                archivo,
+                ensure_ascii=False,
+                indent=2
+            )
+
+        print(
+            "\npublicaciones.json actualizado correctamente."
+        )
 
     finally:
-        # Bloque de limpieza: borra la imagen temporal de la carpeta existente
-        if ruta_local_imagen and os.path.exists(ruta_local_imagen):
-            os.remove(ruta_local_imagen)
-            print(f"Imagen temporal eliminada de {ruta_local_imagen}")
+        # ----------------------------------------------------
+        # ELIMINAR IMAGEN TEMPORAL
+        # ----------------------------------------------------
+
+        if (
+            ruta_local_imagen
+            and os.path.exists(ruta_local_imagen)
+        ):
+            try:
+                os.remove(ruta_local_imagen)
+                print(
+                    f"Imagen temporal eliminada: "
+                    f"{ruta_local_imagen}"
+                )
+            except Exception as e:
+                print(
+                    f"No se pudo eliminar la imagen temporal: {e}"
+                )
+
+
+# ============================================================
+# EJECUTAR
+# ============================================================
 
 if __name__ == "__main__":
     publicar_siguiente()
