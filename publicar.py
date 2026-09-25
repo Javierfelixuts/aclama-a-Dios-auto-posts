@@ -15,7 +15,7 @@ def publicar_siguiente():
         return
 
     if not PAGE_ID or not ACCESS_TOKEN:
-        print("Error: No se encontraron las variables de entorno PAGE_ID o ACCESS_TOKEN")
+        print("Error: No se encontraron las variables de entorno PAGE_ID o ACCESS_TOKEN.")
         return
 
     with open(JSON_FILE, "r", encoding="utf-8") as f:
@@ -32,9 +32,9 @@ def publicar_siguiente():
     complemento = post.get("complemento", "")
     mensaje = post.get("mensaje", "")
     hashtags = post.get("hashtags", "")
-    ruta_imagen_relativa = post.get("images", "") # Ej: "images/8.png" o "8.png"
+    ruta_imagen_relativa = post.get("images", "")
 
-    # Construir el texto completo
+    # Construir el texto completo de la publicación
     partes_texto = []
     if titulo:
         partes_texto.append(titulo)
@@ -49,11 +49,8 @@ def publicar_siguiente():
 
     ruta_local_imagen = ""
     if ruta_imagen_relativa:
-        # Extraer solo el nombre del archivo (ej. "8.png") para guardarlo en la carpeta existente
         nombre_archivo = os.path.basename(ruta_imagen_relativa)
         ruta_local_imagen = os.path.join(CARPETA_DESTINO, nombre_archivo)
-        
-        # Construir la URL de GitHub Raw para descargar el original al vuelo
         image_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/images/{nombre_archivo}"
         
         print(f"Descargando imagen desde GitHub a: {ruta_local_imagen}")
@@ -62,8 +59,6 @@ def publicar_siguiente():
             if img_response.status_code == 200:
                 with open(ruta_local_imagen, "wb") as f_img:
                     f_img.write(img_response.content)
-            else:
-                print(f"Error al descargar la imagen (Código {img_response.status_code})")
         except Exception as e:
             print(f"Excepción al descargar la imagen: {e}")
 
@@ -71,41 +66,25 @@ def publicar_siguiente():
 
     try:
         if tiene_imagen:
-            print(f"Paso 1: Subiendo imagen en borrador ({ruta_local_imagen})...")
+            print("Publicando foto y texto directamente en un solo paso...")
             url_photo = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos"
-            payload_photo = {
-                "published": "false", 
+            
+            # Al enviar 'message' y 'source' juntos, Facebook publica la foto individual con su texto
+            payload = {
+                "message": texto_completo,
                 "access_token": ACCESS_TOKEN
             }
 
             with open(ruta_local_imagen, "rb") as img_file:
-                res_photo = requests.post(url_photo, data=payload_photo, files={"source": img_file})
-
-            if res_photo.status_code != 200:
-                print(f"Error al subir la imagen a Facebook: {res_photo.text}")
-                exit(1)
-
-            photo_id = res_photo.json().get("id")
-            print(f"Imagen subida con éxito. Photo ID: {photo_id}")
-
-            print("Paso 2: Publicando directamente en el Feed con attached_media...")
-            url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-            payload_feed = {
-                "message": texto_completo,
-                "access_token": ACCESS_TOKEN,
-                "published": "true",
-                "attached_media": json.dumps([{"media_fbid": photo_id}])
-            }
-            response = requests.post(url_feed, data=payload_feed)
+                response = requests.post(url_photo, data=payload, files={"source": img_file})
         else:
             print("Publicando post de solo texto directamente en el Feed...")
             url_feed = f"https://graph.facebook.com/v19.0/{PAGE_ID}/feed"
-            payload_feed = {
+            payload = {
                 "message": texto_completo,
-                "access_token": ACCESS_TOKEN,
-                "published": "true"
+                "access_token": ACCESS_TOKEN
             }
-            response = requests.post(url_feed, data=payload_feed)
+            response = requests.post(url_feed, data=payload)
 
         if response.status_code == 200:
             res_data = response.json()
@@ -119,7 +98,6 @@ def publicar_siguiente():
             exit(1)
 
     finally:
-        # Bloque de limpieza: borra la imagen temporal de la carpeta existente pase lo que pase
         if ruta_local_imagen and os.path.exists(ruta_local_imagen):
             os.remove(ruta_local_imagen)
             print(f"Imagen temporal eliminada de {ruta_local_imagen}")
