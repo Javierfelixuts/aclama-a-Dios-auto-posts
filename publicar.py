@@ -225,7 +225,7 @@ def publicar_siguiente():
                 f"Photo ID obtenido: {photo_id}"
             )
 
-            publicar_story(ruta_local_imagen, payload_photo, PAGE_ID, GRAPH_API_URL)
+            publicar_story(img_file, payload_photo, PAGE_ID, GRAPH_API_URL)
 
             if not photo_id:
 
