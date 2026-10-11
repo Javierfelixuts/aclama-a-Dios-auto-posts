@@ -224,8 +224,8 @@ def publicar_siguiente():
                 f"Imagen subida con éxito. "
                 f"Photo ID obtenido: {photo_id}"
             )
-
-            publicar_story(img_file, payload_photo, PAGE_ID, GRAPH_API_URL)
+            with open(ruta_local_imagen, "rb") as img_file_story:
+                publicar_story(img_file_story, payload_photo, PAGE_ID, GRAPH_API_URL)
 
             if not photo_id:
 
